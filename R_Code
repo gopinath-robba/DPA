@@ -1,0 +1,186 @@
+R Code for initial data analysis and EDA
+
+---
+Title: "F1 DataSet Analysis"
+Author: "Gopinath Robba"
+---
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(ggthemes)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(ggrepel)
+library(viridis)
+library(circlize)
+
+resultsDataSet<-read.csv('../input/resultsDataSet.csv',sep=',',stringsAsFactors=F)
+#convert character to numeric
+resultsDataSet$fastestLapSpeed<-as.numeric(resultsDataSet$fastestLapSpeed)
+#convert FastestLap(character) tonumeric(secondes)
+convertFastestLap<-function(x){
+	if(length(x)>0){
+		curMinute<-as.numeric(strsplit(x,":")[[1]][1])
+		curSecond<-as.numeric(strsplit(strsplit(x,":")[[1]][2],"\\.")[[1]][1])
+		return(curMinute*60 + curSecond)
+		}
+		else if(length(x)==0){
+			return(NA)
+		}
+}
+resultsDataSet$fastestLapTimeNum<-sapply(resultsDataSet$fastestLapTime, convertFastestLap)
+
+racesDataset<-read.csv('../input/races.csv',stringsAsFactors=F,sep=',')
+racesDataset$date<-as.Date(racesDataset$date,"%Y-%m-%d")
+racesDataset$name<-gsub(" Grand Prix","",racesDataset$name)
+
+results_2<-left_join(
+  resultsDataSet %>% dplyr::select(-time, -fastestLapTime), 
+  racesDataset %>% dplyr::select(-time, -url), 
+  by='raceId')
+
+circuitsDataset<-read.csv("../input/circuitsDataset.csv",sep=",",stringsAsFactors=F)
+racesDataset<-left_join(racesDataset %>% select(-name,-url), circuitsDataset %>% select(-url), by='circuitId')
+
+results_2 %>% 
+  dplyr::filter(year>2004) %>% 
+  dplyr::group_by(name,year) %>% 
+  summarize(medianFastestLapSpeed = median(fastestLapSpeed,na.rm=T)) %>% 
+  ggplot(aes(x=factor(year),y= medianFastestLapSpeed,color=medianFastestLapSpeed)) + 
+  geom_point() + theme_fivethirtyeight() + 
+  scale_color_gradientn(name="",colours=rev(viridis::viridis(20))) +
+  theme(
+    axis.text.x = element_text(size=6,angle=45),
+    strip.text.x = element_text(size = 10)) + facet_wrap(~name,ncol=9) + 
+  labs(title='Fastest Lap per Circuit, from 2005 to 2017',
+       subtitle='speed in km/h') +
+  guides(color=FALSE)
+
+
+  results_2 %>% 
+  dplyr::filter(year>2004) %>% 
+  dplyr::group_by(name,year) %>% 
+  summarize(medianFastestLapSpeed = median(fastestLapSpeed,na.rm=T)) %>% 
+  ggplot(aes(x=factor(year),y= medianFastestLapSpeed,color=medianFastestLapSpeed)) + 
+  geom_boxplot(alpha=.25) + theme_fivethirtyeight() + 
+  geom_jitter(shape=16,position=position_jitter(0.2),size=1.5) + 
+  geom_smooth(method='loess',aes(group=1),color='red',lty=2,size=.5) +
+  scale_color_gradientn(name="",colours=rev(viridis::viridis(20))) + 
+  labs(title='Fastest Lap per Year',
+       subtitle='in km/h, grouped by Grand Prix') + 
+  guides(color = FALSE)
+
+
+  results_2 %>% 
+  dplyr::filter(year>2004) %>% 
+  dplyr::group_by(name) %>% 
+  ggplot(aes(x=fastestLapSpeed)) + 
+  geom_histogram(bins=100) + theme_fivethirtyeight() + 
+  scale_color_gradientn(name="",colours=rev(viridis::viridis(20))) +
+  theme(
+    axis.text.x = element_text(size=6,angle=45),
+    strip.text.x = element_text(size = 10)) + facet_wrap(~name,ncol=9) + 
+  labs(title='Fastest Lap distribution per Circuit',
+       subtitle='speed in km/h, grouped by years') +
+  guides(color=FALSE)
+
+
+  results_2 %>% 
+  dplyr::filter(year>2010) %>% 
+  dplyr::group_by(name,year) %>% 
+  summarize(medianFastestLapTimeNum = median(fastestLapTimeNum,na.rm=T)) %>% 
+  ggplot(aes(x=factor(year),y= medianFastestLapTimeNum, color=medianFastestLapTimeNum)) +
+  geom_boxplot(alpha=.25) + theme_fivethirtyeight() + 
+  geom_jitter(shape=16,position=position_jitter(0.2),size=1.5) + 
+  geom_smooth(method='loess',aes(group=1),color='red',lty=2,size=.5) +
+  scale_color_gradientn(name="",colours=rev(viridis::viridis(20))) + 
+  labs(title='Lap time per Year',
+       subtitle='in seconds, grouped by Grand Prix') + 
+  guides(color = FALSE)
+
+
+  results_2 %>% 
+  dplyr::filter(year>2004) %>% 
+  dplyr::group_by(name,year) %>% 
+  summarize(medianFastestLapTimeNum = median(fastestLapTimeNum,na.rm=T)) %>% 
+  ggplot(aes(x=factor(year),y= medianFastestLapTimeNum, color=medianFastestLapTimeNum)) +
+  geom_point() + theme_fivethirtyeight() + 
+  scale_color_gradientn(name="",colours=rev(viridis::viridis(20))) +
+  theme(
+    axis.text.x = element_text(size=6,angle=45),
+    strip.text.x = element_text(size = 10)) + facet_wrap(~name,ncol=9) + 
+  labs(title='Lap time per Year, from 2005 to 2017',
+       subtitle='in seconds') +
+  guides(color=FALSE)
+
+ driversDataSet<-read.csv('drivers.csv',sep=',',stringsAsFactors=F)
+#data cleaning, calculating age
+driversDataSet$age_driver <- 2021 - sapply(driversDataSet$dob, function(x) as.numeric(strsplit(x,'/')[[1]][3]))
+
+driversStandingsDataSet<-read.csv('driverStandings.csv',sep=',',stringsAsFactors=F)
+driversDataSet<-left_join(driversDataSet %>% select(-url), driversStandingsDataSet,by='driverId')
+
+  
+results_3<-left_join(
+    resultsDataSet, 
+    driversDataSet %>% dplyr::rename(number_drivers = number) %>% select(-points, -position, -positionText),
+    by=c('driverId','raceId')) 
+    
+results_3<-left_join(results_3,racesDataset %>% select(-time), by='raceId')
+
+
+winsDis<-results_3 %>% 
+  filter(position==1) %>% 
+  group_by(driverRef, circuitRef) %>% 
+  summarize(count=n()) %>%
+  mutate(allWins = sum(count)) %>%
+  ggplot(aes(x=allWins)) +
+  geom_histogram(bins=50) + theme_fivethirtyeight() + ggtitle("Distribution of the number of victories")
+
+winsBar<-results_3 %>% 
+  dplyr::filter(position==1) %>% 
+  dplyr::group_by(driverRef, circuitRef) %>% 
+  dplyr::summarize(count=n()) %>%
+  dplyr::mutate(allWins = sum(count)) %>% 
+  dplyr::filter(allWins>2) %>%
+  ggplot(aes(x=reorder(driverRef, allWins),y= count)) +
+  geom_bar(aes(fill=circuitRef),stat='identity',color='white',size=.1) + 
+  coord_flip() + theme_fivethirtyeight() + 
+  scale_fill_manual(name="",values = viridis::viridis(71)) +
+  guides(fill=guide_legend(ncol=5)) + 
+  theme(legend.text= element_text(size=10),
+        legend.key.size = unit(.1, "cm"),
+        legend.position=c(.65,.20)) + 
+  labs(title="Number of victories per Driver",
+       subtitle="only driversDataSet with 2 or more wins are shown.")
+
+
+winsBar + annotation_custom(grob = ggplotGrob(winsDis), xmin = 22, xmax = 50, ymin = 31, ymax = 90)
+
+
+
+y2021 <- results_3 %>% 
+  dplyr::filter(driverRef=='hamilton' | driverRef=='max_verstappen')%>% 
+  filter(year==2021) %>% 
+  select(date,driverRef,points) %>% mutate(winRace = ifelse(points==9,'yes','no')) %>%
+  group_by(driverRef) %>% 
+  mutate(current = cumsum(points))  %>% 
+  ggplot(aes(x=date,y=current,color=driverRef)) + 
+  geom_line(size=2,alpha=.5) + geom_point(aes(shape=winRace),color='black',size=2) + 
+  theme_fivethirtyeight() + scale_color_brewer(name="",palette='Set1') + ylim(0,120) + 
+  labs(title="Points accumulated during Season 2021",subtitle = 'triangle indicates a race win, circle otherwise') + 
+  theme(legend.position='right',legend.direction='vertical') + guides(shape=FALSE)
+
+y2022<-results_3 %>% 
+  dplyr::filter(driverRef=='hamilton' | driverRef=='max_verstappen') %>%  
+  filter(year==2022) %>% 
+  select(date,driverRef,points) %>% mutate(winRace = ifelse(points==9,'yes','no')) %>%
+  group_by(driverRef) %>% 
+  mutate(current = cumsum(points)) %>% 
+  ggplot(aes(x=date,y=current,color=driverRef)) + 
+  geom_line(size=2,alpha=.5) + geom_point(aes(shape=winRace),color='black',size=2) + 
+  theme_fivethirtyeight() + scale_color_brewer(name="",palette='Set1') + 
+  labs(title="Points accumulated during Season 1989",subtitle = 'triangle indicates a race win, circle otherwise\n[1]:https://www.motorsport.com/f1/news/25-years-ago-today-a-rivalry-became-legendary-1989-japanese-gp/') + 
+  theme(legend.position='right',legend.direction='vertical') + guides(shape=FALSE)
